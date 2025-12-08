@@ -10,7 +10,8 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "panoptes-client (>=1.7.1,<2.0.0)",
-    "lasair (>=0.1.2,<0.2.0)"
+    "lasair (>=0.1.2,<0.2.0)",
+    "requests (>=2.32.5,<3.0.0)"
 ]
 
 

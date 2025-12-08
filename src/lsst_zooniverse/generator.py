@@ -1,9 +1,10 @@
 import json
 import io
+import requests
 
 from itertools import cycle
+from panoptes_client import Subject
 
-from .client import Subject, network_retry
 from .lists import is_list_like
 
 
@@ -13,16 +14,19 @@ GLYPHS = (
 )
 
 
-def create_subject(lc_json, project, metadata={}):
+def create_subject(project, thumbnail_image, lc_json, data_image=None, metadata={}):
     subject = Subject()
     subject.links.project = project
+    subject.add_location(thumbnail_image)
     subject.add_location(
         lc_json,
-        media_type="application/json",
+        manual_mimetype="application/json",
     )
+    if data_image is not None:
+        subject.add_location(data_image)
 
     subject.metadata.update(metadata)
-    network_retry(subject.save)
+    subject.save()
     return subject
 
 
@@ -61,7 +65,20 @@ def lightcurve_to_json_file(*args, **kwargs):
     return f
 
 
-def lightcurve_to_subject(lcs, project, metadata={}, glyphs=GLYPHS):
+def lasair_obj_to_subject(obj, project, metadata={}, glyphs=GLYPHS):
+    lcs = obj["diaSources"]
+    metadata = {"object ID": obj}
+
+    # TODO: This is not fully documented; test and see how the URLs are actually returned by the API
+    image_urls = obj["cutout_urls"]
+    images = [io.BytesIO(requests.get(url).content) for url in image_urls]
+
+    # TODO: Probably want to join the cutouts or something to make data_image
+
     return create_subject(
-        lightcurve_to_json_file(lcs, glyphs=glyphs), project, metadata
+        project=project,
+        lc_json=lightcurve_to_json_file(lcs, glyphs=glyphs),
+        thumbnail_image=images[0],
+        data_image=images[0],
+        metadata=metadata,
     )
