@@ -1,3 +1,5 @@
+"""Helpers for generating Zooniverse subject media from Lasair sources."""
+
 import json
 import io
 
@@ -15,15 +17,22 @@ from .lists import is_list_like
 
 
 class Location(object):
+    """Base location wrapper for media that can be uploaded to a subject."""
+
     def __init__(self, urls):
+        """Store source URLs or payload references used by subclasses."""
         self.urls = urls
 
     def as_file(self):
+        """Return a file-like object and MIME type tuple for upload."""
         raise NotImplementedError
 
 
 class ImageLocation(Location):
+    """Base class for image-like locations rendered from FITS data."""
+
     def as_file(self):
+        """Render the image plot to a PNG file-like buffer."""
         fig = self.plot()
         img_buf = io.BytesIO()
         fig.savefig(img_buf, format="png")
@@ -32,6 +41,7 @@ class ImageLocation(Location):
         return img_buf, "image/png"
 
     def fits_data(self):
+        """Extract the first 2D array from the FITS file for this image key."""
         with fits.open(self.urls[self.IMAGE_KEY], memmap=False) as hdul:
             for hdu in hdul:
                 data = getattr(hdu, "data", None)
@@ -47,6 +57,7 @@ class ImageLocation(Location):
         )
 
     def plot(self):
+        """Create a matplotlib figure for this FITS image."""
         image_data = self.fits_data()
         finite = np.isfinite(image_data)
         if finite.any():
@@ -69,18 +80,26 @@ class ImageLocation(Location):
 
 
 class ScienceImageLocation(ImageLocation):
+    """Location for the science image FITS asset."""
+
     IMAGE_KEY = "Science"
 
 
 class TemplateImageLocation(ImageLocation):
+    """Location for the template image FITS asset."""
+
     IMAGE_KEY = "Template"
 
 
 class DifferenceImageLocation(ImageLocation):
+    """Location for the difference image FITS asset."""
+
     IMAGE_KEY = "Difference"
 
 
 class TripletImageLocation(ImageLocation):
+    """Render science, template, and difference images side by side."""
+
     IMAGE_LOCATIONS = (
         ScienceImageLocation,
         TemplateImageLocation,
@@ -88,6 +107,7 @@ class TripletImageLocation(ImageLocation):
     )
 
     def plot(self):
+        """Create a 1x3 figure containing the configured image locations."""
         fig, axes = pyplot.subplots(1, len(self.IMAGE_LOCATIONS))
         if not is_list_like(axes):
             axes = [axes]
@@ -115,12 +135,15 @@ class TripletImageLocation(ImageLocation):
 
 
 class JSONLocation(Location):
+    """Base class for JSON media payload locations."""
+
     GLYPHS = (
         ("white", "circle"),
         ("red", "square"),
     )
 
     def as_file(self):
+        """Serialize generated JSON payload to a text buffer."""
         d = self.generate()
         str_buf = io.StringIO()
         str_buf.write(d)
@@ -128,6 +151,7 @@ class JSONLocation(Location):
         return str_buf, "application/json"
 
     def generate(self, labels="Lightcurve", glyphs=GLYPHS):
+        """Build serialized light curve JSON for one or more series."""
         if not is_list_like(lcs):
             lcs = [lcs]
 
@@ -155,6 +179,8 @@ class JSONLocation(Location):
 
 
 class LSSTSubjectGenerator(object):
+    """Iterator that yields Panoptes subjects for LSST detections."""
+
     DEFAULT_MEDIA_GENERATORS = [
         ScienceImageLocation,
         TemplateImageLocation,
@@ -168,6 +194,7 @@ class LSSTSubjectGenerator(object):
         lasair=None,
         lasair_token=None,
     ):
+        """Initialize the generator with object IDs and media generators."""
         if lasair is None:
             lasair = lasair_client(lasair_token)
         self.lasair = lasair
@@ -176,6 +203,7 @@ class LSSTSubjectGenerator(object):
         self.media_generators = media_generators
 
     def generate(self, obj):
+        """Build a subject for a single Lasair image URL payload."""
         locations = [g(obj).as_file() for g in self.media_generators]
         subject = Subject()
 
@@ -185,9 +213,11 @@ class LSSTSubjectGenerator(object):
         return subject
 
     def __iter__(self):
+        """Return this generator as an iterator."""
         return self
 
     def __next__(self):
+        """Fetch the next image URL group and build a subject."""
         if self.obj_image_urls is not None:
             try:
                 next_urls = next(self.obj_image_urls)
